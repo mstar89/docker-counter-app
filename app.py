@@ -1,35 +1,46 @@
 import time
+import logging
 import redis
 from flask import Flask, render_template_string
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
-cache = redis.Redis(host='redis', port=6379)
+db = redis.Redis(host='redis', port=6379, decode_responses=True)
 
 def get_hit_count():
     retries = 5
     while True:
         try:
-            return cache.incr('hits')
-        except redis.exceptions.ConnectionError as exc:
+            return db.incr('hits')
+        except redis.exceptions.ConnectionError as e:
             if retries == 0:
-                raise exc
+                logger.error("Redis connection failed after multiple retries.")
+                raise e
             retries -= 1
             time.sleep(0.5)
 
 @app.route('/')
-def hello():
-    count = get_hit_count()
+def index():
+    try:
+        hits = get_hit_count()
+        logger.info(f"Request served. Hit count: {hits}")
+    except Exception as e:
+        logger.error(f"Hit counter error: {e}")
+        return "Database connection error", 500
+
     template = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Docker Compose Counter</title>
+        <title>Visitor Counter</title>
         <style>
             body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
-                color: white;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                background: #0f172a;
+                color: #f8fafc;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
@@ -39,41 +50,39 @@ def hello():
             }
             .card {
                 text-align: center;
-                background: rgba(255, 255, 255, 0.05);
-                padding: 50px;
-                border-radius: 20px;
-                backdrop-filter: blur(15px);
-                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: #1e293b;
+                padding: 3rem;
+                border-radius: 1rem;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                border: 1px solid #334155;
             }
             h1 {
-                margin: 0 0 20px 0;
-                font-size: 2.5rem;
-                color: #0db7ed;
+                margin: 0 0 1rem 0;
+                font-size: 2rem;
+                color: #38bdf8;
             }
             .counter {
-                font-size: 5rem;
-                font-weight: bold;
-                color: #ff6b6b;
-                text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+                font-size: 4.5rem;
+                font-weight: 800;
+                color: #f43f5e;
             }
             p {
-                color: #a0aec0;
-                font-size: 1.1rem;
+                color: #94a3b8;
+                font-size: 1rem;
             }
         </style>
     </head>
     <body>
         <div class="card">
-            <h1>🐳 Docker Compose Counter</h1>
+            <h1>Visitor Counter</h1>
             <p>This page has been viewed</p>
-            <div class="counter">{{ count }}</div>
+            <div class="counter">{{ hits }}</div>
             <p>times</p>
         </div>
     </body>
     </html>
     """
-    return render_template_string(template, count=count)
+    return render_template_string(template, hits=hits)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
